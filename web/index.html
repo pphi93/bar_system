@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Prise de Commande - Bar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="max-w-4xl mx-auto p-6">
+    <h1 class="text-3xl font-bold mb-6 text-center">📋 Prise de commande</h1>
+
+    <!-- Sélection client -->
+    <div class="bg-white shadow rounded p-4 mb-6">
+      <h2 class="text-xl font-semibold mb-2">Client</h2>
+      <select id="clientSelect" class="border p-2 rounded w-full"></select>
+      <input id="newClientName" type="text" placeholder="Nouveau client (nom)" class="border p-2 rounded mt-2 w-full"/>
+      <button onclick="ajouterClient()" class="mt-2 bg-green-500 text-white px-4 py-2 rounded">Ajouter client</button>
+    </div>
+
+    <!-- Liste produits -->
+    <div class="bg-white shadow rounded p-4 mb-6">
+      <h2 class="text-xl font-semibold mb-2">Produits</h2>
+      <div id="articles" class="grid grid-cols-2 gap-4"></div>
+    </div>
+
+    <!-- Panier -->
+    <div class="bg-white shadow rounded p-4 mb-6">
+      <h2 class="text-xl font-semibold mb-2">Panier</h2>
+      <ul id="panier" class="mb-2"></ul>
+      <p class="font-bold">Total : <span id="total">0.00</span> €</p>
+    </div>
+
+    <!-- Signature -->
+    <div class="bg-white shadow rounded p-4 mb-6">
+      <h2 class="text-xl font-semibold mb-2">Signature client</h2>
+      <canvas id="signature" class="border w-full h-40"></canvas>
+      <button onclick="effacerSignature()" class="mt-2 bg-gray-500 text-white px-4 py-2 rounded">Effacer</button>
+    </div>
+
+    <button onclick="validerCommande()" class="w-full bg-blue-600 text-white py-3 rounded text-xl">✅ Valider la commande</button>
+  </div>
+
+<script>
+const API_URL = "http://<IP_RPI>:8000";
+let panier = [];
+let signaturePad;
+
+window.onload = async () => {
+  signaturePad = new SignaturePad(document.getElementById('signature'));
+  await chargerClients();
+  await chargerArticles();
+};
+
+async function chargerClients() {
+  let res = await fetch(`${API_URL}/clients`);
+  let clients = await res.json();
+  let select = document.getElementById("clientSelect");
+  select.innerHTML = "";
+  clients.forEach(c => {
+    let opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.nom;
+    select.appendChild(opt);
+  });
+}
+
+async function ajouterClient() {
+  let nom = document.getElementById("newClientName").value;
+  if (!nom) return;
+  await fetch(`${API_URL}/clients`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nom})
+  });
+  await chargerClients();
+}
+
+async function chargerArticles() {
+  let res = await fetch(`${API_URL}/articles`);
+  let articles = await res.json();
+  let container = document.getElementById("articles");
+  container.innerHTML = "";
+  articles.forEach(a => {
+    let div = document.createElement("div");
+    div.className = "border p-2 rounded flex justify-between";
+    div.innerHTML = `<span>${a.nom} - ${a.prix.toFixed(2)} €</span>
+      <button class="bg-blue-500 text-white px-2 rounded" onclick="ajouterAuPanier(${a.id}, '${a.nom}', ${a.prix})">+</button>`;
+    container.appendChild(div);
+  });
+}
+
+function ajouterAuPanier(id, nom, prix) {
+  panier.push({id, nom, prix});
+  afficherPanier();
+}
+
+function afficherPanier() {
+  let ul = document.getElementById("panier");
+  ul.innerHTML = "";
+  let total = 0;
+  panier.forEach((item, i) => {
+    total += item.prix;
+    let li = document.createElement("li");
+    li.textContent = `${item.nom} - ${item.prix.toFixed(2)} €`;
+    ul.appendChild(li);
+  });
+  document.getElementById("total").textContent = total.toFixed(2);
+}
+
+function effacerSignature() {
+  signaturePad.clear();
+}
+
+async function validerCommande() {
+  if (panier.length === 0) return alert("Panier vide !");
+  if (signaturePad.isEmpty()) return alert("Signature obligatoire !");
+  let clientId = document.getElementById("clientSelect").value;
+
+  let commande = {
+    client_id: clientId,
+    articles: panier.map(p => p.id),
+    signature: signaturePad.toDataURL()
+  };
+
+  await fetch(`${API_URL}/commandes`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(commande)
+  });
+
+  alert("Commande validée et envoyée à l’imprimante !");
+  panier = [];
+  afficherPanier();
+  signaturePad.clear();
+}
+</script>
+</body>
+</html>

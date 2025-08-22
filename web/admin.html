@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Administration - Bar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="max-w-5xl mx-auto p-6">
+    <h1 class="text-3xl font-bold text-center mb-6">⚙️ Administration</h1>
+
+    <!-- Onglets -->
+    <div class="flex space-x-4 mb-6">
+      <button onclick="switchTab('articles')" class="tab px-4 py-2 bg-blue-600 text-white rounded">Articles</button>
+      <button onclick="switchTab('clients')" class="tab px-4 py-2 bg-gray-300 text-black rounded">Clients</button>
+    </div>
+
+    <!-- Gestion Articles -->
+    <div id="tab-articles" class="tab-content">
+      <h2 class="text-xl font-semibold mb-4">Produits</h2>
+      <div class="mb-4 flex space-x-2">
+        <input id="articleNom" placeholder="Nom produit" class="border p-2 rounded w-1/3"/>
+        <input id="articlePrix" placeholder="Prix (€)" type="number" step="0.01" class="border p-2 rounded w-1/3"/>
+        <button onclick="ajouterArticle()" class="bg-green-500 text-white px-4 py-2 rounded">Ajouter</button>
+      </div>
+      <table class="w-full bg-white shadow rounded">
+        <thead>
+          <tr class="bg-gray-200">
+            <th class="p-2">Nom</th>
+            <th class="p-2">Prix</th>
+            <th class="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="articlesTable"></tbody>
+      </table>
+    </div>
+
+    <!-- Gestion Clients -->
+    <div id="tab-clients" class="tab-content hidden">
+      <h2 class="text-xl font-semibold mb-4">Clients</h2>
+      <div class="mb-4 flex space-x-2">
+        <input id="clientNom" placeholder="Nom client" class="border p-2 rounded w-1/3"/>
+        <input id="clientPrenom" placeholder="Prénom" class="border p-2 rounded w-1/3"/>
+        <button onclick="ajouterClient()" class="bg-green-500 text-white px-4 py-2 rounded">Ajouter</button>
+      </div>
+      <table class="w-full bg-white shadow rounded">
+        <thead>
+          <tr class="bg-gray-200">
+            <th class="p-2">Nom</th>
+            <th class="p-2">Prénom</th>
+            <th class="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="clientsTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+const API_URL = "http://<IP_RPI>:8000"; // ⚠️ Remplacer par l’IP du Raspberry Pi
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById(`tab-${tab}`).classList.remove('hidden');
+
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('bg-blue-600','text-white'));
+  event.target.classList.add('bg-blue-600','text-white');
+}
+
+/* =============== ARTICLES =============== */
+async function chargerArticles() {
+  let res = await fetch(`${API_URL}/articles`);
+  let data = await res.json();
+  let tbody = document.getElementById("articlesTable");
+  tbody.innerHTML = "";
+  data.forEach(a => {
+    let tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="p-2"><span id="nom-${a.id}">${a.nom}</span></td>
+      <td class="p-2"><span id="prix-${a.id}">${a.prix.toFixed(2)}</span> €</td>
+      <td class="p-2 space-x-2">
+        <button onclick="editArticle(${a.id})" class="bg-yellow-500 text-white px-2 py-1 rounded">Modifier</button>
+        <button onclick="supprimerArticle(${a.id})" class="bg-red-500 text-white px-2 py-1 rounded">Supprimer</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function ajouterArticle() {
+  let nom = document.getElementById("articleNom").value;
+  let prix = parseFloat(document.getElementById("articlePrix").value);
+  if (!nom || isNaN(prix)) return alert("Nom et prix obligatoires !");
+  await fetch(`${API_URL}/articles`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nom, prix})
+  });
+  document.getElementById("articleNom").value = "";
+  document.getElementById("articlePrix").value = "";
+  chargerArticles();
+}
+
+async function supprimerArticle(id) {
+  if (!confirm("Supprimer cet article ?")) return;
+  await fetch(`${API_URL}/articles/${id}`, { method: "DELETE" });
+  chargerArticles();
+}
+
+function editArticle(id) {
+  let nom = document.getElementById(`nom-${id}`).innerText;
+  let prix = document.getElementById(`prix-${id}`).innerText;
+
+  document.getElementById(`nom-${id}`).outerHTML = `<input id="edit-nom-${id}" class="border p-1" value="${nom}"/>`;
+  document.getElementById(`prix-${id}`).outerHTML = `<input id="edit-prix-${id}" class="border p-1 w-20" type="number" step="0.01" value="${prix}"/>`;
+
+  let tdActions = document.querySelector(`#articlesTable tr td:last-child button[onclick="editArticle(${id})"]`).parentElement;
+  tdActions.innerHTML = `
+    <button onclick="saveArticle(${id})" class="bg-green-500 text-white px-2 py-1 rounded">Enregistrer</button>
+    <button onclick="chargerArticles()" class="bg-gray-400 text-white px-2 py-1 rounded">Annuler</button>
+  `;
+}
+
+async function saveArticle(id) {
+  let nom = document.getElementById(`edit-nom-${id}`).value;
+  let prix = parseFloat(document.getElementById(`edit-prix-${id}`).value);
+  await fetch(`${API_URL}/articles/${id}`, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nom, prix})
+  });
+  chargerArticles();
+}
+
+/* =============== CLIENTS =============== */
+async function chargerClients() {
+  let res = await fetch(`${API_URL}/clients`);
+  let data = await res.json();
+  let tbody = document.getElementById("clientsTable");
+  tbody.innerHTML = "";
+  data.forEach(c => {
+    let tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="p-2"><span id="c-nom-${c.id}">${c.nom}</span></td>
+      <td class="p-2"><span id="c-prenom-${c.id}">${c.prenom ?? ""}</span></td>
+      <td class="p-2 space-x-2">
+        <button onclick="editClient(${c.id})" class="bg-yellow-500 text-white px-2 py-1 rounded">Modifier</button>
+        <button onclick="supprimerClient(${c.id})" class="bg-red-500 text-white px-2 py-1 rounded">Supprimer</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function ajouterClient() {
+  let nom = document.getElementById("clientNom").value;
+  let prenom = document.getElementById("clientPrenom").value;
+  if (!nom) return alert("Nom obligatoire !");
+  await fetch(`${API_URL}/clients`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nom, prenom})
+  });
+  document.getElementById("clientNom").value = "";
+  document.getElementById("clientPrenom").value = "";
+  chargerClients();
+}
+
+async function supprimerClient(id) {
+  if (!confirm("Supprimer ce client ?")) return;
+  await fetch(`${API_URL}/clients/${id}`, { method: "DELETE" });
+  chargerClients();
+}
+
+function editClient(id) {
+  let nom = document.getElementById(`c-nom-${id}`).innerText;
+  let prenom = document.getElementById(`c-prenom-${id}`).innerText;
+
+  document.getElementById(`c-nom-${id}`).outerHTML = `<input id="edit-c-nom-${id}" class="border p-1" value="${nom}"/>`;
+  document.getElementById(`c-prenom-${id}`).outerHTML = `<input id="edit-c-prenom-${id}" class="border p-1" value="${prenom}"/>`;
+
+  let tdActions = document.querySelector(`#clientsTable tr td:last-child button[onclick="editClient(${id})"]`).parentElement;
+  tdActions.innerHTML = `
+    <button onclick="saveClient(${id})" class="bg-green-500 text-white px-2 py-1 rounded">Enregistrer</button>
+    <button onclick="chargerClients()" class="bg-gray-400 text-white px-2 py-1 rounded">Annuler</button>
+  `;
+}
+
+async function saveClient(id) {
+  let nom = document.getElementById(`edit-c-nom-${id}`).value;
+  let prenom = document.getElementById(`edit-c-prenom-${id}`).value;
+  await fetch(`${API_URL}/clients/${id}`, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nom, prenom})
+  });
+  chargerClients();
+}
+
+/* INIT */
+window.onload = () => {
+  chargerArticles();
+  chargerClients();
+};
+</script>
+</body>
+</html>
